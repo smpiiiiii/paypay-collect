@@ -42,7 +42,8 @@
         .badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 700 }
         .badge-unpaid { background: #fff3e0; color: #e65100 }
         .badge-paid { background: #e8f5e9; color: #2e7d32 }
-        .badge-self { background: #e3f2fd; color: #1565c0 }
+        .badge-self { background: #fff3e0; color: #e65100 }
+        .badge-confirm { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50 }
         .badge-tier { background: #f3e5f5; color: #7b1fa2; margin-right: 4px }
         .join-box { text-align: center; padding: 8px 0 }
         .join-box input, .join-box select { max-width: 240px; display: inline-block; text-align: center; margin-bottom: 6px }
@@ -275,7 +276,7 @@
     // ===== 幹事モード =====
     document.getElementById('adminToggle').addEventListener('click', function() {
         isAdmin = !isAdmin;
-        this.textContent = isAdmin ? '🔓 幹事モードON（タップで支払いチェック）' : '🔐 幹事モード';
+        this.textContent = isAdmin ? '🔓 幹事モードON（タップで確認済みチェック）' : '🔐 幹事モード';
         if (eventData) renderEvent();
     });
 
@@ -431,12 +432,17 @@
         tierBadge.textContent = m.tier + ' ¥' + (m.amount || 0).toLocaleString();
         meta.appendChild(tierBadge);
 
-        // 自己申告バッジ
-        if (m.paid && m.selfReported) {
+        // ステータスバッジ（3段階）
+        if (m.paid && m.selfReported && !m.confirmed) {
             var selfBadge = document.createElement('span');
             selfBadge.className = 'badge badge-self';
-            selfBadge.textContent = '自己申告';
+            selfBadge.textContent = '📝 自己申告';
             meta.appendChild(selfBadge);
+        } else if (m.paid && m.confirmed) {
+            var confBadge = document.createElement('span');
+            confBadge.className = 'badge badge-confirm';
+            confBadge.textContent = '✅ 幹事確認済';
+            meta.appendChild(confBadge);
         }
 
         var timeText = '';
@@ -449,14 +455,25 @@
         info.appendChild(nameEl); info.appendChild(meta);
 
         var badge = document.createElement('span');
-        badge.className = 'badge ' + (m.paid ? 'badge-paid' : 'badge-unpaid');
-        badge.textContent = m.paid ? '✅ 済' : '⏳ 未払い';
+        if (m.paid && m.confirmed) {
+            badge.className = 'badge badge-confirm';
+            badge.textContent = '✅ 確認済';
+        } else if (m.paid && m.selfReported) {
+            badge.className = 'badge badge-self';
+            badge.textContent = '📝 申告済';
+        } else if (m.paid) {
+            badge.className = 'badge badge-paid';
+            badge.textContent = '✅ 済';
+        } else {
+            badge.className = 'badge badge-unpaid';
+            badge.textContent = '⏳ 未払い';
+        }
 
         div.appendChild(check); div.appendChild(info); div.appendChild(badge);
 
         if (isAdmin) {
             (function(name) {
-                div.addEventListener('click', function() { togglePaid(name); });
+                div.addEventListener('click', function() { confirmPaid(name); });
             })(m.name);
         }
         return div;
@@ -475,6 +492,15 @@
     function selfReport(name) {
         var xhr = new XMLHttpRequest();
         xhr.open('POST', API + '/api/self-report/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() { loadEvent(); };
+        xhr.send(JSON.stringify({ name: name }));
+    }
+
+    // ===== 幹事確認 =====
+    function confirmPaid(name) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/confirm/' + eventId, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.onload = function() { loadEvent(); };
         xhr.send(JSON.stringify({ name: name }));

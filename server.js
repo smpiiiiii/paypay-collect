@@ -139,6 +139,26 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // API: 幹事確認（幹事が支払いを確認済みにする）
+    if (pathname.match(/^\/api\/confirm\//) && req.method === 'POST') {
+        const id = pathname.split('/')[3];
+        const body = await getBody(req);
+        const events = loadEvents();
+        if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        const member = events[id].members.find(m => m.name === body.name);
+        if (member) {
+            member.confirmed = !member.confirmed;
+            if (member.confirmed) {
+                member.paid = true;
+                member.paidAt = member.paidAt || new Date().toISOString();
+            }
+            saveEvents(events);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+        return;
+    }
+
     // フロントエンド配信: /collect または /collect/:id
     if (pathname === '/' || pathname === '/collect' || pathname.startsWith('/collect/')) {
         fs.readFile(path.join(__dirname, 'public', 'index.html'), (e, d) => {
