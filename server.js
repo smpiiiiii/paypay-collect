@@ -48,13 +48,14 @@ const server = http.createServer(async (req, res) => {
         const body = await getBody(req);
         const id = crypto.randomBytes(4).toString('hex');
         const events = loadEvents();
-        // priceTiers: [{ label: '男子', amount: 5000 }, { label: '女子', amount: 3000 }]
+        // priceTiers: [{ label: '男子', amount: 5000, paypayLink: '...' }, ...]
         const tiers = Array.isArray(body.priceTiers) && body.priceTiers.length > 0
-            ? body.priceTiers.filter(t => t.label && t.amount > 0)
-            : [{ label: '一般', amount: body.amount || 0 }];
+            ? body.priceTiers.filter(t => t.label && t.amount > 0).map(t => ({
+                label: t.label, amount: t.amount, paypayLink: t.paypayLink || ''
+            }))
+            : [{ label: '一般', amount: body.amount || 0, paypayLink: '' }];
         events[id] = {
             id, name: body.name || '集金',
-            paypayLink: body.paypayLink || '',
             priceTiers: tiers,
             members: [], created: new Date().toISOString()
         };

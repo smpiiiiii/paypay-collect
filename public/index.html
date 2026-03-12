@@ -53,8 +53,11 @@
         .hidden { display: none }
 
         /* 料金区分の動的フォーム */
-        .tier-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center }
-        .tier-row input { flex: 1 }
+        .tier-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; padding: 10px; background: #f9f9f9; border-radius: 10px }
+        .tier-row input { flex: 1; min-width: 0 }
+        .tier-row .tier-name { flex: 1; min-width: 80px }
+        .tier-row .tier-amount { flex: 1; min-width: 80px }
+        .tier-row .tier-paypay { flex: 100%; font-size: 12px }
         .tier-row .del-tier { width: 32px; height: 32px; border: none; background: #ffeaea; color: #e74c3c; border-radius: 8px; font-size: 16px; cursor: pointer; flex-shrink: 0 }
         .tier-row .del-tier:active { opacity: .7 }
         .add-tier { font-size: 12px; color: #ff0033; cursor: pointer; text-decoration: underline; display: inline-block; margin-top: 4px }
@@ -94,13 +97,8 @@
                 <label>イベント名</label>
                 <input type="text" id="cName" placeholder="例: 3月飲み会🍻">
             </div>
-            <div style="margin-bottom:8px">
-                <label>💱 PayPay送金リンク（任意）</label>
-                <input type="url" id="cPaypay" placeholder="https://pay.paypay.ne.jp/...">
-                <div style="font-size:10px;color:#999;margin-top:2px">PayPayアプリ →「受け取る」→「リンクを作成」で取得</div>
-            </div>
             <div>
-                <label>💴 料金区分</label>
+                <label>💴 料金区分（区分ごとにPayPayリンクを設定可）</label>
                 <div id="tierRows"></div>
                 <span class="add-tier" id="addTierBtn">＋ 区分を追加</span>
             </div>
@@ -170,26 +168,31 @@
 
     // ===== 料金区分フォーム =====
     var tierContainer = document.getElementById('tierRows');
-    function addTierRow(label, amount) {
+    function addTierRow(label, amount, paypayLink) {
         var row = document.createElement('div');
         row.className = 'tier-row';
         var labelInput = document.createElement('input');
         labelInput.type = 'text'; labelInput.placeholder = '区分名（例: 男子）';
-        labelInput.value = label || '';
+        labelInput.className = 'tier-name'; labelInput.value = label || '';
         var amountInput = document.createElement('input');
         amountInput.type = 'number'; amountInput.placeholder = '金額';
+        amountInput.className = 'tier-amount';
         amountInput.inputMode = 'numeric'; amountInput.value = amount || '';
         var del = document.createElement('button');
         del.className = 'del-tier'; del.textContent = '✕'; del.type = 'button';
         del.addEventListener('click', function() {
             if (tierContainer.children.length > 1) row.remove();
         });
+        var paypayInput = document.createElement('input');
+        paypayInput.type = 'url'; paypayInput.placeholder = 'PayPayリンク（任意）';
+        paypayInput.className = 'tier-paypay'; paypayInput.value = paypayLink || '';
         row.appendChild(labelInput); row.appendChild(amountInput); row.appendChild(del);
+        row.appendChild(paypayInput);
         tierContainer.appendChild(row);
     }
     // 初期行: 2つ
-    addTierRow('男子', ''); addTierRow('女子', '');
-    document.getElementById('addTierBtn').addEventListener('click', function() { addTierRow('', ''); });
+    addTierRow('男子', '', ''); addTierRow('女子', '', '');
+    document.getElementById('addTierBtn').addEventListener('click', function() { addTierRow('', '', ''); });
 
     // ===== 初期化 =====
     function init() {
@@ -204,14 +207,16 @@
     // ===== イベント作成 =====
     document.getElementById('createBtn').addEventListener('click', function() {
         var name = document.getElementById('cName').value.trim() || '集金';
-        var paypayLink = (document.getElementById('cPaypay').value || '').trim();
         var tiers = [];
         var rows = tierContainer.querySelectorAll('.tier-row');
         for (var i = 0; i < rows.length; i++) {
-            var inputs = rows[i].querySelectorAll('input');
-            var tLabel = (inputs[0].value || '').trim();
-            var tAmount = parseInt(inputs[1].value) || 0;
-            if (tLabel && tAmount > 0) tiers.push({ label: tLabel, amount: tAmount });
+            var nameInput = rows[i].querySelector('.tier-name');
+            var amountInput = rows[i].querySelector('.tier-amount');
+            var paypayInput = rows[i].querySelector('.tier-paypay');
+            var tLabel = (nameInput.value || '').trim();
+            var tAmount = parseInt(amountInput.value) || 0;
+            var tPaypay = (paypayInput.value || '').trim();
+            if (tLabel && tAmount > 0) tiers.push({ label: tLabel, amount: tAmount, paypayLink: tPaypay });
         }
         if (tiers.length === 0) { alert('料金区分を1つ以上入力してください'); return; }
 
@@ -225,7 +230,7 @@
             } else { alert('作成に失敗: ' + xhr.status); }
         };
         xhr.onerror = function() { alert('通信エラーが発生しました'); };
-        xhr.send(JSON.stringify({ name: name, paypayLink: paypayLink, priceTiers: tiers }));
+        xhr.send(JSON.stringify({ name: name, priceTiers: tiers }));
     });
 
     // ===== 参加登録 =====
@@ -377,10 +382,12 @@
             var done = makeText('div', '✅ 支払い済み' + (me.selfReported ? '（自己申告）' : ''), 'self-done');
             status.appendChild(done);
         } else {
-            // PayPayリンクがあれば表示
-            if (eventData.paypayLink) {
+            // 区分のPayPayリンクを取得
+            var tierInfo = eventData.priceTiers.find(function(t) { return t.label === me.tier; });
+            var tierPaypayLink = tierInfo && tierInfo.paypayLink ? tierInfo.paypayLink : '';
+            if (tierPaypayLink) {
                 var payBtn = document.createElement('a');
-                payBtn.href = eventData.paypayLink; payBtn.target = '_blank';
+                payBtn.href = tierPaypayLink; payBtn.target = '_blank';
                 payBtn.className = 'btn btn-paypay'; payBtn.style.marginBottom = '6px';
                 payBtn.textContent = '💱 PayPayで ¥' + (me.amount || 0).toLocaleString() + ' 送金する';
                 status.appendChild(payBtn);
