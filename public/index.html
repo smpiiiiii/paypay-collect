@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>集金チェッカー</title>
+    <meta name="description" content="LINEで共有できる集金管理ツール。飲み会やイベントの集金状況をみんなで確認できます。">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box }
+        body { font-family: 'Noto Sans JP', sans-serif; background: #f5f5f5; min-height: 100vh }
+        .header { background: linear-gradient(135deg, #ff0033, #e60028); color: #fff; padding: 20px 16px; text-align: center; position: sticky; top: 0; z-index: 10 }
+        .header h1 { font-size: 17px; font-weight: 900 }
+        .header .sub { font-size: 12px; opacity: .8; margin-top: 4px }
+        .stats { display: flex; justify-content: center; gap: 10px; margin-top: 10px; font-size: 12px }
+        .stats .s { background: rgba(255,255,255,.15); padding: 5px 12px; border-radius: 16px }
+        .stats b { color: #ffd700 }
+        .content { padding: 12px; max-width: 420px; margin: 0 auto }
+        .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.06) }
+        .card h3 { font-size: 14px; color: #333; margin-bottom: 10px }
+        label { font-size: 12px; font-weight: 700; color: #666; display: block; margin-bottom: 4px }
+        input { width: 100%; border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none }
+        input:focus { border-color: #ff0033 }
+        .btn { display: block; width: 100%; border: none; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; color: #fff; margin-top: 8px; text-align: center; text-decoration: none }
+        .btn:active { opacity: .8 }
+        .btn-red { background: linear-gradient(135deg, #ff0033, #e60028) }
+        .btn-green { background: linear-gradient(135deg, #00b900, #009900) }
+        .btn-outline { background: #fff; color: #ff0033; border: 2px solid #ff0033 }
+        .bar-bg { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 8px 0 }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, #00b900, #4caf50); border-radius: 4px; transition: width .5s }
+        .person { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.04); cursor: pointer; user-select: none }
+        .person:active { transform: scale(.98) }
+        .person.paid { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) }
+        .check { width: 28px; height: 28px; border-radius: 50%; border: 2.5px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0 }
+        .person.paid .check { background: #00b900; border-color: #00b900; color: #fff }
+        .person .info { flex: 1 }
+        .person .name { font-size: 14px; font-weight: 700 }
+        .person .meta { font-size: 10px; color: #999 }
+        .badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 700 }
+        .badge-unpaid { background: #fff3e0; color: #e65100 }
+        .badge-paid { background: #e8f5e9; color: #2e7d32 }
+        .badge-type { background: #e3f2fd; color: #1565c0; margin-right: 4px }
+        .join-box { text-align: center; padding: 8px 0 }
+        .join-box input { max-width: 200px; display: inline-block; text-align: center; margin-bottom: 6px }
+        .join-type { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px }
+        .join-type button { padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; border: 2px solid #ddd; background: #fff; color: #666 }
+        .join-type button.active { border-color: #ff0033; color: #ff0033; background: #fff0f3 }
+        .msg { text-align: center; padding: 16px; color: #999; font-size: 12px }
+        .share-btns { display: flex; gap: 8px; margin-top: 8px }
+        .share-btns .btn { flex: 1; font-size: 12px; padding: 10px }
+        .admin-toggle { font-size: 11px; color: #999; text-align: center; margin-top: 8px; cursor: pointer; text-decoration: underline }
+        .hidden { display: none }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1 id="headerTitle">💰 集金チェッカー</h1>
+    <div class="sub" id="headerSub"></div>
+    <div class="stats hidden" id="statsBar">
+        <div class="s">参加 <b id="joinCount">0</b>人</div>
+        <div class="s">済 <b id="paidCount">0</b>人</div>
+        <div class="s">回収 <b id="paidAmt">¥0</b></div>
+    </div>
+</div>
+
+<div class="content">
+    <div id="createView">
+        <div class="card">
+            <h3>📝 新しい集金を作成</h3>
+            <div style="margin-bottom:8px">
+                <label>イベント名</label>
+                <input type="text" id="cName" placeholder="例: 3月飲み会🍻">
+            </div>
+            <div>
+                <label>💴 1人あたりの金額</label>
+                <input type="number" id="cAmount" placeholder="例: 4000" inputmode="numeric">
+            </div>
+            <button class="btn btn-red" id="createBtn">✅ 作成する</button>
+        </div>
+    </div>
+
+    <div id="eventView" class="hidden">
+        <div class="card" id="joinCard">
+            <h3>🙋 参加する</h3>
+            <div class="join-box">
+                <input type="text" id="joinName" placeholder="あなたの名前">
+                <div class="join-type">
+                    <button class="active" id="typeJoin">✋ 参加</button>
+                    <button id="typeLate">🕐 途中参加</button>
+                </div>
+                <button class="btn btn-green" style="max-width:200px;margin:0 auto" id="joinBtn">参加する！</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;font-size:13px">
+                <span id="evLabel"></span>
+                <span style="font-weight:900;color:#ff0033" id="evTotal"></span>
+            </div>
+            <div class="bar-bg"><div class="bar-fill" id="barFill" style="width:0%"></div></div>
+        </div>
+
+        <div id="memberList"></div>
+
+        <div class="share-btns">
+            <button class="btn btn-outline" id="refreshBtn">🔄 更新</button>
+            <button class="btn btn-green" id="shareBtn">📤 LINE共有</button>
+        </div>
+        <div class="admin-toggle" id="adminToggle">🔐 幹事モード</div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var API = location.origin;
+    var eventId = null;
+    var eventData = null;
+    var joinType = '参加';
+    var isAdmin = false;
+
+    // DOM要素取得
+    var createView = document.getElementById('createView');
+    var eventView = document.getElementById('eventView');
+    var statsBar = document.getElementById('statsBar');
+    var memberList = document.getElementById('memberList');
+
+    // 要素を安全に作成（innerHTMLを使わない）
+    function clearChildren(el) {
+        while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function makeText(tag, text, className) {
+        var el = document.createElement(tag);
+        el.textContent = text;
+        if (className) el.className = className;
+        return el;
+    }
+
+    // 初期化（URLパスからイベントIDを取得）
+    function init() {
+        var parts = location.pathname.split('/');
+        // /collect/:id の形式に対応
+        if (parts.length >= 3 && parts[1] === 'collect' && parts[2]) {
+            eventId = parts[2];
+            loadEvent();
+        }
+    }
+
+    // イベント作成
+    document.getElementById('createBtn').addEventListener('click', function() {
+        var name = document.getElementById('cName').value.trim() || '集金';
+        var amount = parseInt(document.getElementById('cAmount').value) || 0;
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/create', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                location.href = '/collect/' + data.id;
+            } else {
+                alert('作成に失敗: ' + xhr.status);
+            }
+        };
+        xhr.onerror = function() { alert('通信エラーが発生しました'); };
+        xhr.send(JSON.stringify({ name: name, amount: amount }));
+    });
+
+    // 参加タイプ切替
+    document.getElementById('typeJoin').addEventListener('click', function() {
+        joinType = '参加';
+        this.classList.add('active');
+        document.getElementById('typeLate').classList.remove('active');
+    });
+    document.getElementById('typeLate').addEventListener('click', function() {
+        joinType = '途中参加';
+        this.classList.add('active');
+        document.getElementById('typeJoin').classList.remove('active');
+    });
+
+    // 参加登録
+    document.getElementById('joinBtn').addEventListener('click', function() {
+        var name = document.getElementById('joinName').value.trim();
+        if (!name) { alert('名前を入力してください'); return; }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/join/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                if (data.status === 'already_joined') alert(name + 'さんは既に参加済みです');
+                document.getElementById('joinName').value = '';
+                loadEvent();
+            }
+        };
+        xhr.onerror = function() { alert('通信エラー'); };
+        xhr.send(JSON.stringify({ name: name, type: joinType }));
+    });
+
+    // 更新ボタン
+    document.getElementById('refreshBtn').addEventListener('click', function() { loadEvent(); });
+
+    // LINE共有
+    document.getElementById('shareBtn').addEventListener('click', function() {
+        var url = location.origin + '/collect/' + eventId;
+        var paid = 0;
+        for (var i = 0; i < eventData.members.length; i++) {
+            if (eventData.members[i].paid) paid++;
+        }
+        var text = '💰 ' + eventData.name + '\n✅ ' + paid + '/' + eventData.members.length + '人 支払い済\n金額: ¥' + eventData.amount.toLocaleString() + '/人\n\n👇 まだの人はこちら\n' + url;
+        location.href = 'https://line.me/R/share?text=' + encodeURIComponent(text);
+    });
+
+    // 幹事モード切り替え
+    document.getElementById('adminToggle').addEventListener('click', function() {
+        isAdmin = !isAdmin;
+        this.textContent = isAdmin ? '🔓 幹事モードON（タップで支払いチェック）' : '🔐 幹事モード';
+        if (eventData) renderEvent();
+    });
+
+    // イベント読み込み
+    function loadEvent() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', API + '/api/event/' + eventId, true);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                eventData = JSON.parse(xhr.responseText);
+                renderEvent();
+            } else {
+                alert('イベントが見つかりません');
+            }
+        };
+        xhr.send();
+    }
+
+    // 表示更新
+    function renderEvent() {
+        createView.classList.add('hidden');
+        eventView.classList.remove('hidden');
+        statsBar.classList.remove('hidden');
+
+        document.getElementById('headerTitle').textContent = '💰 ' + eventData.name;
+        document.getElementById('headerSub').textContent = '¥' + (eventData.amount || 0).toLocaleString() + '/人';
+
+        var members = eventData.members;
+        var paidCount = 0;
+        for (var i = 0; i < members.length; i++) { if (members[i].paid) paidCount++; }
+        var total = eventData.amount * members.length;
+        var paidTotal = eventData.amount * paidCount;
+        var pct = total > 0 ? (paidTotal / total * 100) : 0;
+
+        document.getElementById('joinCount').textContent = members.length;
+        document.getElementById('paidCount').textContent = paidCount;
+        document.getElementById('paidAmt').textContent = '¥' + paidTotal.toLocaleString();
+        document.getElementById('evLabel').textContent = eventData.name;
+        document.getElementById('evTotal').textContent = '¥' + paidTotal.toLocaleString() + ' / ¥' + total.toLocaleString();
+        document.getElementById('barFill').style.width = pct + '%';
+
+        clearChildren(memberList);
+
+        if (members.length === 0) {
+            memberList.appendChild(makeText('div', 'まだ参加者がいません🙈', 'msg'));
+            return;
+        }
+
+        // 未払い→支払い済の順にソート
+        var sorted = members.slice().sort(function(a, b) {
+            if (a.paid === b.paid) return 0;
+            return a.paid ? 1 : -1;
+        });
+
+        for (var j = 0; j < sorted.length; j++) {
+            memberList.appendChild(createPersonEl(sorted[j]));
+        }
+    }
+
+    // メンバー要素を作成
+    function createPersonEl(m) {
+        var div = document.createElement('div');
+        div.className = 'person' + (m.paid ? ' paid' : '');
+
+        var check = document.createElement('div');
+        check.className = 'check';
+        check.textContent = m.paid ? '✓' : '';
+
+        var info = document.createElement('div');
+        info.className = 'info';
+        var nameEl = document.createElement('div');
+        nameEl.className = 'name';
+        nameEl.textContent = m.name;
+        var meta = document.createElement('div');
+        meta.className = 'meta';
+
+        if (m.type) {
+            var typeBadge = document.createElement('span');
+            typeBadge.className = 'badge badge-type';
+            typeBadge.textContent = m.type;
+            meta.appendChild(typeBadge);
+        }
+
+        var timeText = '';
+        if (m.paid && m.paidAt) {
+            timeText = new Date(m.paidAt).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) + ' 支払済';
+        } else if (m.joinedAt) {
+            timeText = new Date(m.joinedAt).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) + ' 参加';
+        }
+        meta.appendChild(document.createTextNode(timeText));
+        info.appendChild(nameEl);
+        info.appendChild(meta);
+
+        var badge = document.createElement('span');
+        badge.className = 'badge ' + (m.paid ? 'badge-paid' : 'badge-unpaid');
+        badge.textContent = m.paid ? '✅ 済' : '⏳ 未払い';
+
+        div.appendChild(check);
+        div.appendChild(info);
+        div.appendChild(badge);
+
+        if (isAdmin) {
+            (function(name) {
+                div.addEventListener('click', function() { togglePaid(name); });
+            })(m.name);
+        }
+
+        return div;
+    }
+
+    // 支払い状態切り替え
+    function togglePaid(name) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/toggle/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() { loadEvent(); };
+        xhr.send(JSON.stringify({ name: name }));
+    }
+
+    // 自動更新（10秒ごと）
+    setInterval(function() { if (eventId) loadEvent(); }, 10000);
+
+    init();
+})();
+</script>
+</body>
+</html>

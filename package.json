@@ -1,0 +1,12 @@
+{
+  "name": "paypay-collect-checker",
+  "version": "1.0.0",
+  "description": "PayPay集金チェッカー - LINEで共有できる集金管理ツール",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
