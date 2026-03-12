@@ -116,7 +116,7 @@
 
         <!-- 参加フォーム -->
         <div class="card" id="joinCard">
-            <h3>🙋 参加する</h3>
+            <h3 id="joinTitle">🙋 参加する</h3>
             <div class="join-box">
                 <input type="text" id="joinName" placeholder="あなたの名前">
                 <select id="joinTier"></select>
@@ -369,8 +369,9 @@
         if (!me) { card.classList.add('hidden'); return; }
 
         card.classList.remove('hidden');
-        // 参加フォームを非表示（既に参加済み）
-        document.getElementById('joinCard').classList.add('hidden');
+        // 参加フォームは表示したまま（他の人も追加できる）
+        document.getElementById('joinTitle').textContent = '➕ 他の人も追加する';
+        document.getElementById('joinName').placeholder = '追加する人の名前';
 
         // 名前と金額
         var nameDiv = makeText('div', '👤 ' + me.name + '（' + me.tier + ' ¥' + (me.amount || 0).toLocaleString() + '）', '');
