@@ -47,6 +47,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/create' && req.method === 'POST') {
         const body = await getBody(req);
         const id = crypto.randomBytes(4).toString('hex');
+        const adminToken = crypto.randomBytes(16).toString('hex');
         const events = loadEvents();
         // priceTiers: [{ label: '男子', amount: 5000, paypayLink: '...' }, ...]
         const tiers = Array.isArray(body.priceTiers) && body.priceTiers.length > 0
@@ -56,22 +57,24 @@ const server = http.createServer(async (req, res) => {
             : [{ label: '一般', amount: body.amount || 0, paypayLink: '' }];
         events[id] = {
             id, name: body.name || '集金',
+            adminToken,
             priceTiers: tiers,
             members: [], created: new Date().toISOString()
         };
         saveEvents(events);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id }));
+        res.end(JSON.stringify({ id, adminToken }));
         return;
     }
 
-    // API: イベント取得
+    // API: イベント取得（adminTokenはクライアントに返さない）
     if (pathname.match(/^\/api\/event\//) && req.method === 'GET') {
         const id = pathname.split('/')[3];
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        const { adminToken, ...safeData } = events[id];
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(events[id]));
+        res.end(JSON.stringify(safeData));
         return;
     }
 
@@ -139,12 +142,18 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // API: 幹事確認（幹事が支払いを確認済みにする）
+    // API: 幹事確認（幹事が支払いを確認済みにする — adminToken必須）
     if (pathname.match(/^\/api\/confirm\//) && req.method === 'POST') {
         const id = pathname.split('/')[3];
         const body = await getBody(req);
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        // adminToken検証
+        if (!body.adminToken || body.adminToken !== events[id].adminToken) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'forbidden', message: '幹事権限がありません' }));
+            return;
+        }
         const member = events[id].members.find(m => m.name === body.name);
         if (member) {
             member.confirmed = !member.confirmed;
@@ -156,6 +165,18 @@ const server = http.createServer(async (req, res) => {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok' }));
+        return;
+    }
+
+    // API: 幹事トークン検証
+    if (pathname.match(/^\/api\/verify-admin\//) && req.method === 'GET') {
+        const id = pathname.split('/')[3];
+        const token = url.searchParams.get('token');
+        const events = loadEvents();
+        if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        const valid = token && token === events[id].adminToken;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid }));
         return;
     }
 

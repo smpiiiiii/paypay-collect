@@ -153,6 +153,7 @@
     var eventData = null;
     var isAdmin = false;
     var myName = '';
+    var adminToken = '';
 
     // DOM要素取得
     var createView = document.getElementById('createView');
@@ -200,7 +201,10 @@
         var parts = location.pathname.split('/');
         if (parts.length >= 3 && parts[1] === 'collect' && parts[2]) {
             eventId = parts[2];
-            try { myName = localStorage.getItem('collect_name_' + eventId) || ''; } catch(e) {}
+            try {
+                myName = localStorage.getItem('collect_name_' + eventId) || '';
+                adminToken = localStorage.getItem('collect_admin_' + eventId) || '';
+            } catch(e) {}
             loadEvent();
         }
     }
@@ -227,6 +231,10 @@
         xhr.onload = function() {
             if (xhr.status === 200) {
                 var data = JSON.parse(xhr.responseText);
+                // 幹事トークンをlocalStorageに保存
+                if (data.adminToken) {
+                    try { localStorage.setItem('collect_admin_' + data.id, data.adminToken); } catch(e) {}
+                }
                 location.href = '/collect/' + data.id;
             } else { alert('作成に失敗: ' + xhr.status); }
         };
@@ -275,9 +283,30 @@
 
     // ===== 幹事モード =====
     document.getElementById('adminToggle').addEventListener('click', function() {
-        isAdmin = !isAdmin;
-        this.textContent = isAdmin ? '🔓 幹事モードON（タップで確認済みチェック）' : '🔐 幹事モード';
-        if (eventData) renderEvent();
+        if (!adminToken) {
+            alert('❗ 幹事権限がありません\nイベントを作成した端末からのみ幹事モードを使えます。');
+            return;
+        }
+        // サーバー側でトークンを検証
+        var self = this;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', API + '/api/verify-admin/' + eventId + '?token=' + encodeURIComponent(adminToken), true);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                if (data.valid) {
+                    isAdmin = !isAdmin;
+                    self.textContent = isAdmin ? '🔓 幹事モードON（タップで確認済みチェック）' : '🔐 幹事モード';
+                    if (eventData) renderEvent();
+                } else {
+                    adminToken = '';
+                    try { localStorage.removeItem('collect_admin_' + eventId); } catch(e) {}
+                    alert('❗ 幹事トークンが無効です。幹事権限がありません。');
+                    self.style.display = 'none';
+                }
+            }
+        };
+        xhr.send();
     });
 
     // ===== イベント読み込み =====
@@ -296,6 +325,9 @@
         createView.classList.add('hidden');
         eventView.classList.remove('hidden');
         statsBar.classList.remove('hidden');
+
+        // 幹事モードリンクの表示制御（トークンがない場合は非表示）
+        document.getElementById('adminToggle').style.display = adminToken ? '' : 'none';
 
         document.getElementById('headerTitle').textContent = '💰 ' + eventData.name;
         // ヘッダーサブ: 料金一覧
@@ -502,8 +534,17 @@
         var xhr = new XMLHttpRequest();
         xhr.open('POST', API + '/api/confirm/' + eventId, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.onload = function() { loadEvent(); };
-        xhr.send(JSON.stringify({ name: name }));
+        xhr.onload = function() {
+            if (xhr.status === 403) {
+                alert('❗ 幹事権限がありません');
+                isAdmin = false;
+                document.getElementById('adminToggle').textContent = '🔐 幹事モード';
+                renderEvent();
+                return;
+            }
+            loadEvent();
+        };
+        xhr.send(JSON.stringify({ name: name, adminToken: adminToken }));
     }
 
     // 自動更新（10秒ごと）
