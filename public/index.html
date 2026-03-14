@@ -29,6 +29,7 @@
         .btn-orange { background: linear-gradient(135deg, #ff6b00, #ff8c00) }
         .btn-outline { background: #fff; color: #ff0033; border: 2px solid #ff0033 }
         .btn-sm { font-size: 12px; padding: 8px 14px; margin-top: 0; width: auto; display: inline-block; border-radius: 8px }
+        .btn-sm.btn-orange { background: linear-gradient(135deg, #ff6b00, #ff8c00); color: #fff; border: none; cursor: pointer; font-weight: 700; font-family: inherit; padding: 5px 10px; font-size: 11px }
         .btn-danger-sm { font-size: 11px; padding: 5px 10px; margin-top: 0; width: auto; display: inline-block; border-radius: 8px; background: #e74c3c; color: #fff; border: none; cursor: pointer; font-weight: 700; font-family: inherit }
         .btn-danger-sm:active { opacity: .7 }
         .bar-bg { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 8px 0 }
@@ -563,19 +564,33 @@
         }
         actionsDiv.appendChild(badge);
 
-        // 幹事モード時: 削除ボタン
         if (isAdmin) {
+            // 幹事モード時: 削除ボタン
             var delBtn = document.createElement('button');
             delBtn.className = 'btn-danger-sm';
             delBtn.textContent = '🗑';
             delBtn.title = m.name + 'を削除';
             (function(memberName) {
                 delBtn.addEventListener('click', function(e) {
-                    e.stopPropagation(); // 確認チェックのクリックイベントを防ぐ
+                    e.stopPropagation();
                     removeMember(memberName);
                 });
             })(m.name);
             actionsDiv.appendChild(delBtn);
+        } else if (!m.paid) {
+            // 通常モード: 未払いメンバーに自己申告ボタン
+            var reportBtn = document.createElement('button');
+            reportBtn.className = 'btn-sm btn-orange';
+            reportBtn.textContent = '💸 申告';
+            reportBtn.style.marginLeft = '4px';
+            (function(memberName, memberAmount) {
+                reportBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (!confirm(memberName + 'さんの ¥' + (memberAmount || 0).toLocaleString() + ' を送金済みにしますか？')) return;
+                    selfReport(memberName);
+                });
+            })(m.name, m.amount);
+            actionsDiv.appendChild(reportBtn);
         }
 
         div.appendChild(check); div.appendChild(info); div.appendChild(actionsDiv);
