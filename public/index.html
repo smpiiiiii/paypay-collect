@@ -294,7 +294,7 @@
             }
         };
         xhr.onerror = function() { alert('通信エラー'); };
-        xhr.send(JSON.stringify({ name: name, tier: tier }));
+        xhr.send(JSON.stringify({ name: name, tier: tier, addedBy: myName || '' }));
     });
 
     // ===== 更新・共有 =====
@@ -577,8 +577,8 @@
                 });
             })(m.name);
             actionsDiv.appendChild(delBtn);
-        } else if (!m.paid) {
-            // 通常モード: 未払いメンバーに自己申告ボタン
+        } else if (!m.paid && myName && (m.name === myName || m.addedBy === myName)) {
+            // 通常モード: 自分または自分が追加した人のみ自己申告ボタンを表示
             var reportBtn = document.createElement('button');
             reportBtn.className = 'btn-sm btn-orange';
             reportBtn.textContent = '💸 申告';

@@ -138,9 +138,11 @@ const server = http.createServer(async (req, res) => {
         // 料金区分から金額を取得
         const tierInfo = events[id].priceTiers.find(t => t.label === tier);
         const amount = tierInfo ? tierInfo.amount : (events[id].priceTiers[0]?.amount || 0);
+        const addedBy = (body.addedBy || '').trim();
         events[id].members.push({
             name, tier: tier || events[id].priceTiers[0]?.label || '一般',
             amount, paid: false, selfReported: false, confirmed: false,
+            addedBy: addedBy || name,
             joinedAt: new Date().toISOString(), paidAt: null
         });
         saveEvents(events);
