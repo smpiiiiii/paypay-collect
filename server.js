@@ -1,10 +1,10 @@
-// PayPay集金チェッカー サーバー v2（料金区分・自己申告・PayPayリンク対応）
+// PayPay集金チェッカー サーバー v3（バグ修正 + 参加者削除機能）
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const DATA_FILE = path.join(__dirname, '.data', 'events.json');
 
 // .dataディレクトリを作成（Glitchで永続化されるフォルダ）
@@ -31,6 +31,44 @@ function getBody(req) {
         req.on('data', c => body += c);
         req.on('end', () => { try { resolve(JSON.parse(body)); } catch(e) { resolve({}); } });
     });
+}
+
+/**
+ * 旧形式のイベントデータを新形式にマイグレーションする
+ * priceTiers / adminToken / メンバーフィールドの補完
+ */
+function migrateEvent(event) {
+    // priceTiersがない旧データ → amount から自動生成
+    if (!Array.isArray(event.priceTiers) || event.priceTiers.length === 0) {
+        event.priceTiers = [{
+            label: '一般',
+            amount: event.amount || 0,
+            paypayLink: event.paypayLink || ''
+        }];
+    }
+    // priceTiersの各区分にpaypayLinkがない場合は空文字を付与
+    for (let i = 0; i < event.priceTiers.length; i++) {
+        if (event.priceTiers[i].paypayLink === undefined) {
+            event.priceTiers[i].paypayLink = '';
+        }
+    }
+    // adminTokenがない旧データ → 新しく生成
+    if (!event.adminToken) {
+        event.adminToken = crypto.randomBytes(16).toString('hex');
+    }
+    // メンバーのフィールド補完
+    if (Array.isArray(event.members)) {
+        for (let i = 0; i < event.members.length; i++) {
+            const m = event.members[i];
+            if (m.tier === undefined) m.tier = event.priceTiers[0]?.label || '一般';
+            if (m.amount === undefined) m.amount = event.priceTiers[0]?.amount || 0;
+            if (m.selfReported === undefined) m.selfReported = false;
+            if (m.confirmed === undefined) m.confirmed = false;
+        }
+    } else {
+        event.members = [];
+    }
+    return event;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -72,6 +110,9 @@ const server = http.createServer(async (req, res) => {
         const id = pathname.split('/')[3];
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        // 旧データの自動マイグレーション
+        events[id] = migrateEvent(events[id]);
+        saveEvents(events);
         const { adminToken, ...safeData } = events[id];
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(safeData));
@@ -84,6 +125,7 @@ const server = http.createServer(async (req, res) => {
         const body = await getBody(req);
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        events[id] = migrateEvent(events[id]);
         const name = (body.name || '').trim();
         const tier = body.tier || '';
         if (!name) { res.writeHead(400); res.end('Name required'); return; }
@@ -98,7 +140,7 @@ const server = http.createServer(async (req, res) => {
         const amount = tierInfo ? tierInfo.amount : (events[id].priceTiers[0]?.amount || 0);
         events[id].members.push({
             name, tier: tier || events[id].priceTiers[0]?.label || '一般',
-            amount, paid: false, selfReported: false,
+            amount, paid: false, selfReported: false, confirmed: false,
             joinedAt: new Date().toISOString(), paidAt: null
         });
         saveEvents(events);
@@ -149,7 +191,7 @@ const server = http.createServer(async (req, res) => {
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
         // adminToken検証
-        if (!body.adminToken || body.adminToken !== events[id].adminToken) {
+        if (!body.adminToken || !events[id].adminToken || body.adminToken !== events[id].adminToken) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'forbidden', message: '幹事権限がありません' }));
             return;
@@ -168,13 +210,44 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // API: 参加者削除（幹事用 — adminToken必須）
+    if (pathname.match(/^\/api\/remove\//) && req.method === 'POST') {
+        const id = pathname.split('/')[3];
+        const body = await getBody(req);
+        const events = loadEvents();
+        if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        // adminToken検証
+        if (!body.adminToken || !events[id].adminToken || body.adminToken !== events[id].adminToken) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'forbidden', message: '幹事権限がありません' }));
+            return;
+        }
+        const memberName = (body.name || '').trim();
+        if (!memberName) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', message: '名前が必要です' }));
+            return;
+        }
+        const idx = events[id].members.findIndex(m => m.name === memberName);
+        if (idx === -1) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'not_found', message: 'メンバーが見つかりません' }));
+            return;
+        }
+        events[id].members.splice(idx, 1);
+        saveEvents(events);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', removed: memberName }));
+        return;
+    }
+
     // API: 幹事トークン検証
     if (pathname.match(/^\/api\/verify-admin\//) && req.method === 'GET') {
         const id = pathname.split('/')[3];
         const token = url.searchParams.get('token');
         const events = loadEvents();
         if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
-        const valid = token && token === events[id].adminToken;
+        const valid = token && events[id].adminToken && token === events[id].adminToken;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ valid }));
         return;
@@ -194,4 +267,4 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDataDir();
-server.listen(PORT, '0.0.0.0', () => console.log(`集金チェッカーサーバー v2 起動: ポート ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`集金チェッカーサーバー v3 起動: ポート ${PORT}`));

@@ -29,6 +29,8 @@
         .btn-orange { background: linear-gradient(135deg, #ff6b00, #ff8c00) }
         .btn-outline { background: #fff; color: #ff0033; border: 2px solid #ff0033 }
         .btn-sm { font-size: 12px; padding: 8px 14px; margin-top: 0; width: auto; display: inline-block; border-radius: 8px }
+        .btn-danger-sm { font-size: 11px; padding: 5px 10px; margin-top: 0; width: auto; display: inline-block; border-radius: 8px; background: #e74c3c; color: #fff; border: none; cursor: pointer; font-weight: 700; font-family: inherit }
+        .btn-danger-sm:active { opacity: .7 }
         .bar-bg { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 8px 0 }
         .bar-fill { height: 100%; background: linear-gradient(90deg, #00b900, #4caf50); border-radius: 4px; transition: width .5s }
         .person { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.04); user-select: none }
@@ -36,9 +38,10 @@
         .person.me { border: 2px solid #ff6b00 }
         .check { width: 28px; height: 28px; border-radius: 50%; border: 2.5px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0 }
         .person.paid .check { background: #00b900; border-color: #00b900; color: #fff }
-        .person .info { flex: 1 }
+        .person .info { flex: 1; min-width: 0 }
         .person .name { font-size: 14px; font-weight: 700 }
         .person .meta { font-size: 10px; color: #999 }
+        .person .actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center }
         .badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 700 }
         .badge-unpaid { background: #fff3e0; color: #e65100 }
         .badge-paid { background: #e8f5e9; color: #2e7d32 }
@@ -69,6 +72,9 @@
 
         .clickable { cursor: pointer }
         .clickable:active { transform: scale(.98) }
+
+        /* 幹事モードバナー */
+        .admin-banner { background: linear-gradient(135deg, #fff3e0, #ffe0b2); color: #e65100; padding: 8px 12px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 8px; border: 1px solid #ffcc80 }
 
         @media (max-width: 360px) {
             .stats { gap: 6px; font-size: 11px }
@@ -109,6 +115,9 @@
 
     <!-- ===== イベントビュー ===== -->
     <div id="eventView" class="hidden">
+        <!-- 幹事モードバナー -->
+        <div id="adminBanner" class="admin-banner hidden">🔓 幹事モードON — タップで確認チェック、🗑で参加者削除</div>
+
         <!-- 自分のアクションカード（参加済みの場合に表示） -->
         <div id="myActionCard" class="card my-card hidden">
             <h3>💸 あなたのステータス</h3>
@@ -143,6 +152,7 @@
             <button class="btn btn-green" id="shareBtn">📤 LINE共有</button>
         </div>
         <div class="admin-toggle" id="adminToggle">🔐 幹事モード</div>
+        <div style="text-align:center;margin-top:12px"><a href="/" style="font-size:11px;color:#999;text-decoration:underline">＋ 自分も新しい集金を作成する</a></div>
     </div>
 </div>
 
@@ -167,6 +177,11 @@
         var el = document.createElement(tag); el.textContent = text;
         if (className) el.className = className; return el;
     }
+    // 安全にpriceTiersを取得
+    function getTiers() {
+        if (!eventData) return [];
+        return Array.isArray(eventData.priceTiers) ? eventData.priceTiers : [];
+    }
 
     // ===== 料金区分フォーム =====
     var tierContainer = document.getElementById('tierRows');
@@ -180,6 +195,7 @@
         amountInput.type = 'number'; amountInput.placeholder = '金額';
         amountInput.className = 'tier-amount';
         amountInput.inputMode = 'numeric'; amountInput.value = amount || '';
+        amountInput.max = '9999999';
         var del = document.createElement('button');
         del.className = 'del-tier'; del.textContent = '✕'; del.type = 'button';
         del.addEventListener('click', function() {
@@ -201,6 +217,16 @@
         var parts = location.pathname.split('/');
         if (parts.length >= 3 && parts[1] === 'collect' && parts[2]) {
             eventId = parts[2];
+            // URLの?admin=TOKENパラメータから幹事トークンを取得・保存
+            var urlParams = new URLSearchParams(location.search);
+            var urlAdminToken = urlParams.get('admin');
+            if (urlAdminToken) {
+                try { localStorage.setItem('collect_admin_' + eventId, urlAdminToken); } catch(e) {}
+                // URLからadminパラメータを除去（トークンをURLに残さない）
+                urlParams.delete('admin');
+                var cleanUrl = location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                history.replaceState(null, '', cleanUrl);
+            }
             try {
                 myName = localStorage.getItem('collect_name_' + eventId) || '';
                 adminToken = localStorage.getItem('collect_admin_' + eventId) || '';
@@ -221,6 +247,8 @@
             var tLabel = (nameInput.value || '').trim();
             var tAmount = parseInt(amountInput.value) || 0;
             var tPaypay = (paypayInput.value || '').trim();
+            // 金額の上限チェック
+            if (tAmount > 9999999) tAmount = 9999999;
             if (tLabel && tAmount > 0) tiers.push({ label: tLabel, amount: tAmount, paypayLink: tPaypay });
         }
         if (tiers.length === 0) { alert('料金区分を1つ以上入力してください'); return; }
@@ -255,8 +283,11 @@
             if (xhr.status === 200) {
                 var data = JSON.parse(xhr.responseText);
                 if (data.status === 'already_joined') alert(name + 'さんは既に参加済みです');
-                myName = name;
-                try { localStorage.setItem('collect_name_' + eventId, name); } catch(e) {}
+                // 最初の参加時のみmyNameを設定（他の人を追加しても上書きしない）
+                if (!myName) {
+                    myName = name;
+                    try { localStorage.setItem('collect_name_' + eventId, name); } catch(e) {}
+                }
                 document.getElementById('joinName').value = '';
                 loadEvent();
             }
@@ -269,15 +300,18 @@
     document.getElementById('refreshBtn').addEventListener('click', function() { loadEvent(); });
     document.getElementById('shareBtn').addEventListener('click', function() {
         var url = location.origin + '/collect/' + eventId;
+        var tiers = getTiers();
+        var members = eventData ? (eventData.members || []) : [];
         var paid = 0;
-        for (var i = 0; i < eventData.members.length; i++) { if (eventData.members[i].paid) paid++; }
+        for (var i = 0; i < members.length; i++) { if (members[i].paid) paid++; }
         var tierInfo = '';
-        if (eventData.priceTiers.length > 1) {
-            tierInfo = eventData.priceTiers.map(function(t) { return t.label + ': ¥' + t.amount.toLocaleString(); }).join(' / ');
-        } else {
-            tierInfo = '¥' + eventData.priceTiers[0].amount.toLocaleString() + '/人';
+        if (tiers.length > 1) {
+            tierInfo = tiers.map(function(t) { return t.label + ': ¥' + (t.amount || 0).toLocaleString(); }).join(' / ');
+        } else if (tiers.length === 1) {
+            tierInfo = '¥' + (tiers[0].amount || 0).toLocaleString() + '/人';
         }
-        var text = '💰 ' + eventData.name + '\n✅ ' + paid + '/' + eventData.members.length + '人 支払い済\n' + tierInfo + '\n\n👇 参加・支払い報告はこちら\n' + url;
+        var eventName = eventData ? (eventData.name || '集金') : '集金';
+        var text = '💰 ' + eventName + '\n✅ ' + paid + '/' + members.length + '人 支払い済\n' + tierInfo + '\n\n👇 参加・支払い報告はこちら\n' + url;
         location.href = 'https://line.me/R/share?text=' + encodeURIComponent(text);
     });
 
@@ -296,7 +330,7 @@
                 var data = JSON.parse(xhr.responseText);
                 if (data.valid) {
                     isAdmin = !isAdmin;
-                    self.textContent = isAdmin ? '🔓 幹事モードON（タップで確認済みチェック）' : '🔐 幹事モード';
+                    self.textContent = isAdmin ? '🔓 幹事モードOFF' : '🔐 幹事モード';
                     if (eventData) renderEvent();
                 } else {
                     adminToken = '';
@@ -314,14 +348,25 @@
         var xhr = new XMLHttpRequest();
         xhr.open('GET', API + '/api/event/' + eventId, true);
         xhr.onload = function() {
-            if (xhr.status === 200) { eventData = JSON.parse(xhr.responseText); renderEvent(); }
+            if (xhr.status === 200) {
+                try {
+                    eventData = JSON.parse(xhr.responseText);
+                } catch(e) {
+                    eventData = null;
+                    alert('データの読み込みに失敗しました');
+                    return;
+                }
+                renderEvent();
+            }
             else { alert('イベントが見つかりません'); }
         };
+        xhr.onerror = function() { alert('通信エラー: サーバーに接続できません'); };
         xhr.send();
     }
 
     // ===== 表示更新 =====
     function renderEvent() {
+        if (!eventData) return;
         createView.classList.add('hidden');
         eventView.classList.remove('hidden');
         statsBar.classList.remove('hidden');
@@ -329,14 +374,18 @@
         // 幹事モードリンクの表示制御（トークンがない場合は非表示）
         document.getElementById('adminToggle').style.display = adminToken ? '' : 'none';
 
-        document.getElementById('headerTitle').textContent = '💰 ' + eventData.name;
+        // 幹事モードバナー
+        document.getElementById('adminBanner').classList.toggle('hidden', !isAdmin);
+
+        document.getElementById('headerTitle').textContent = '💰 ' + (eventData.name || '集金');
         // ヘッダーサブ: 料金一覧
-        var subText = eventData.priceTiers.map(function(t) {
-            return t.label + ' ¥' + t.amount.toLocaleString();
+        var tiers = getTiers();
+        var subText = tiers.map(function(t) {
+            return (t.label || '一般') + ' ¥' + (t.amount || 0).toLocaleString();
         }).join(' / ');
         document.getElementById('headerSub').textContent = subText;
 
-        var members = eventData.members;
+        var members = eventData.members || [];
         var paidCount = 0, totalAmt = 0, paidAmt = 0;
         for (var i = 0; i < members.length; i++) {
             totalAmt += members[i].amount || 0;
@@ -347,17 +396,17 @@
         document.getElementById('joinCount').textContent = members.length;
         document.getElementById('paidCount').textContent = paidCount;
         document.getElementById('paidAmt').textContent = '¥' + paidAmt.toLocaleString();
-        document.getElementById('evLabel').textContent = eventData.name;
+        document.getElementById('evLabel').textContent = eventData.name || '集金';
         document.getElementById('evTotal').textContent = '¥' + paidAmt.toLocaleString() + ' / ¥' + totalAmt.toLocaleString();
         document.getElementById('barFill').style.width = pct + '%';
 
         // 料金区分ごとの内訳
         var tierSummary = document.getElementById('tierSummary');
         clearChildren(tierSummary);
-        if (eventData.priceTiers.length > 1) {
-            var parts = eventData.priceTiers.map(function(t) {
+        if (tiers.length > 1) {
+            var parts = tiers.map(function(t) {
                 var count = members.filter(function(m) { return m.tier === t.label; }).length;
-                return t.label + ': ' + count + '人';
+                return (t.label || '') + ': ' + count + '人';
             });
             tierSummary.textContent = parts.join(' / ');
         }
@@ -365,10 +414,10 @@
         // 参加フォームの料金区分セレクトボックスを更新
         var tierSelect = document.getElementById('joinTier');
         clearChildren(tierSelect);
-        for (var k = 0; k < eventData.priceTiers.length; k++) {
+        for (var k = 0; k < tiers.length; k++) {
             var opt = document.createElement('option');
-            opt.value = eventData.priceTiers[k].label;
-            opt.textContent = eventData.priceTiers[k].label + '（¥' + eventData.priceTiers[k].amount.toLocaleString() + '）';
+            opt.value = tiers[k].label || '';
+            opt.textContent = (tiers[k].label || '一般') + '（¥' + (tiers[k].amount || 0).toLocaleString() + '）';
             tierSelect.appendChild(opt);
         }
 
@@ -398,7 +447,11 @@
         clearChildren(status);
 
         if (!myName) { card.classList.add('hidden'); return; }
-        var me = eventData.members.find(function(m) { return m.name === myName; });
+        var members = eventData ? (eventData.members || []) : [];
+        var me = null;
+        for (var i = 0; i < members.length; i++) {
+            if (members[i].name === myName) { me = members[i]; break; }
+        }
         if (!me) { card.classList.add('hidden'); return; }
 
         card.classList.remove('hidden');
@@ -407,7 +460,7 @@
         document.getElementById('joinName').placeholder = '追加する人の名前';
 
         // 名前と金額
-        var nameDiv = makeText('div', '👤 ' + me.name + '（' + me.tier + ' ¥' + (me.amount || 0).toLocaleString() + '）', '');
+        var nameDiv = makeText('div', '👤 ' + me.name + '（' + (me.tier || '一般') + ' ¥' + (me.amount || 0).toLocaleString() + '）', '');
         nameDiv.style.fontWeight = '700'; nameDiv.style.marginBottom = '8px';
         status.appendChild(nameDiv);
 
@@ -417,7 +470,11 @@
             status.appendChild(done);
         } else {
             // 区分のPayPayリンクを取得
-            var tierInfo = eventData.priceTiers.find(function(t) { return t.label === me.tier; });
+            var tiers = getTiers();
+            var tierInfo = null;
+            for (var t = 0; t < tiers.length; t++) {
+                if (tiers[t].label === me.tier) { tierInfo = tiers[t]; break; }
+            }
             var tierPaypayLink = tierInfo && tierInfo.paypayLink ? tierInfo.paypayLink : '';
             if (tierPaypayLink) {
                 var payBtn = document.createElement('a');
@@ -454,14 +511,14 @@
         info.className = 'info';
         var nameEl = document.createElement('div');
         nameEl.className = 'name';
-        nameEl.textContent = m.name + (m.name === myName ? ' 👈' : '');
+        nameEl.textContent = (m.name || '') + (m.name === myName ? ' 👈' : '');
         var meta = document.createElement('div');
         meta.className = 'meta';
 
         // 料金区分バッジ
         var tierBadge = document.createElement('span');
         tierBadge.className = 'badge badge-tier';
-        tierBadge.textContent = m.tier + ' ¥' + (m.amount || 0).toLocaleString();
+        tierBadge.textContent = (m.tier || '一般') + ' ¥' + (m.amount || 0).toLocaleString();
         meta.appendChild(tierBadge);
 
         // ステータスバッジ（3段階）
@@ -486,6 +543,10 @@
         meta.appendChild(document.createTextNode(' ' + timeText));
         info.appendChild(nameEl); info.appendChild(meta);
 
+        // 右側: バッジ + 削除ボタン（幹事モード時）
+        var actionsDiv = document.createElement('div');
+        actionsDiv.className = 'actions';
+
         var badge = document.createElement('span');
         if (m.paid && m.confirmed) {
             badge.className = 'badge badge-confirm';
@@ -500,8 +561,24 @@
             badge.className = 'badge badge-unpaid';
             badge.textContent = '⏳ 未払い';
         }
+        actionsDiv.appendChild(badge);
 
-        div.appendChild(check); div.appendChild(info); div.appendChild(badge);
+        // 幹事モード時: 削除ボタン
+        if (isAdmin) {
+            var delBtn = document.createElement('button');
+            delBtn.className = 'btn-danger-sm';
+            delBtn.textContent = '🗑';
+            delBtn.title = m.name + 'を削除';
+            (function(memberName) {
+                delBtn.addEventListener('click', function(e) {
+                    e.stopPropagation(); // 確認チェックのクリックイベントを防ぐ
+                    removeMember(memberName);
+                });
+            })(m.name);
+            actionsDiv.appendChild(delBtn);
+        }
+
+        div.appendChild(check); div.appendChild(info); div.appendChild(actionsDiv);
 
         if (isAdmin) {
             (function(name) {
@@ -539,11 +616,40 @@
                 alert('❗ 幹事権限がありません');
                 isAdmin = false;
                 document.getElementById('adminToggle').textContent = '🔐 幹事モード';
+                document.getElementById('adminBanner').classList.add('hidden');
                 renderEvent();
                 return;
             }
             loadEvent();
         };
+        xhr.send(JSON.stringify({ name: name, adminToken: adminToken }));
+    }
+
+    // ===== 参加者削除（幹事用） =====
+    function removeMember(name) {
+        if (!confirm('「' + name + '」を参加者リストから削除しますか？\nこの操作は取り消せません。')) return;
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/remove/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 403) {
+                alert('❗ 幹事権限がありません');
+                isAdmin = false;
+                document.getElementById('adminToggle').textContent = '🔐 幹事モード';
+                document.getElementById('adminBanner').classList.add('hidden');
+                renderEvent();
+                return;
+            }
+            if (xhr.status === 200) {
+                // 自分自身を削除した場合のクリーンアップ
+                if (name === myName) {
+                    myName = '';
+                    try { localStorage.removeItem('collect_name_' + eventId); } catch(e) {}
+                }
+            }
+            loadEvent();
+        };
+        xhr.onerror = function() { alert('通信エラー'); };
         xhr.send(JSON.stringify({ name: name, adminToken: adminToken }));
     }
 
