@@ -50,6 +50,21 @@
         .badge-confirm { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50 }
         .badge-tier { background: #f3e5f5; color: #7b1fa2; margin-right: 4px }
         .join-box { text-align: center; padding: 8px 0 }
+
+        /* 区分別カラー凡例 */
+        .tier-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
+        .tier-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px }
+        .tier-legend-item .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0 }
+
+        /* 区分別背景色（カード） */
+        .person[data-tier-color="0"] { background: linear-gradient(135deg, #e3f2fd, #bbdefb) }
+        .person[data-tier-color="1"] { background: linear-gradient(135deg, #fce4ec, #f8bbd9) }
+        .person[data-tier-color="2"] { background: linear-gradient(135deg, #e8f5e9, #c8e6c9) }
+        .person[data-tier-color="3"] { background: linear-gradient(135deg, #fff3e0, #ffe0b2) }
+        .person[data-tier-color="4"] { background: linear-gradient(135deg, #ede7f6, #d1c4e9) }
+        .person[data-tier-color="5"] { background: linear-gradient(135deg, #e0f2f1, #b2dfdb) }
+        /* 支払い済みは緑系でオーバーライド */
+        .person.paid { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) !important }
         .join-box input, .join-box select { max-width: 240px; display: inline-block; text-align: center; margin-bottom: 6px }
         .msg { text-align: center; padding: 16px; color: #999; font-size: 12px }
         .share-btns { display: flex; gap: 8px; margin-top: 8px }
@@ -182,6 +197,26 @@
     function getTiers() {
         if (!eventData) return [];
         return Array.isArray(eventData.priceTiers) ? eventData.priceTiers : [];
+    }
+
+    // 区分ごとのカラーインデックスマップ（区分名 → 0〜5）
+    var TIER_COLORS = [
+        { bg: '#1565c0', dot: '#1976d2' }, // 青（男子など）
+        { bg: '#c62828', dot: '#e53935' }, // 赤/ピンク（女子など）
+        { bg: '#2e7d32', dot: '#43a047' }, // 緑
+        { bg: '#e65100', dot: '#fb8c00' }, // オレンジ
+        { bg: '#6a1b9a', dot: '#8e24aa' }, // 紫
+        { bg: '#00695c', dot: '#00897b' }, // ティール
+    ];
+
+    // 現在のイベントの区分カラーマップを返す
+    function getTierColorMap() {
+        var tiers = getTiers();
+        var map = {};
+        for (var i = 0; i < tiers.length; i++) {
+            map[tiers[i].label] = i % TIER_COLORS.length;
+        }
+        return map;
     }
 
     // ===== 料金区分フォーム =====
@@ -436,8 +471,33 @@
             if (a.paid === b.paid) return 0;
             return a.paid ? 1 : -1;
         });
+
+        // 区分凡例を表示（区分が2つ以上の場合）
+        var tierColorMap = getTierColorMap();
+        var tiers = getTiers();
+        if (tiers.length >= 2) {
+            var legend = document.createElement('div');
+            legend.className = 'tier-legend';
+            for (var ti = 0; ti < tiers.length; ti++) {
+                var colorIdx = tierColorMap[tiers[ti].label] !== undefined ? tierColorMap[tiers[ti].label] : 0;
+                var color = TIER_COLORS[colorIdx];
+                var item = document.createElement('div');
+                item.className = 'tier-legend-item';
+                item.style.background = color.bg + '18';
+                item.style.border = '1.5px solid ' + color.bg + '55';
+                var dot = document.createElement('div');
+                dot.className = 'dot';
+                dot.style.background = color.dot;
+                var lbl = document.createTextNode(tiers[ti].label);
+                item.appendChild(dot);
+                item.appendChild(lbl);
+                legend.appendChild(item);
+            }
+            memberList.appendChild(legend);
+        }
+
         for (var j = 0; j < sorted.length; j++) {
-            memberList.appendChild(createPersonEl(sorted[j]));
+            memberList.appendChild(createPersonEl(sorted[j], tierColorMap));
         }
     }
 
@@ -497,12 +557,20 @@
     }
 
     // ===== メンバー要素を作成 =====
-    function createPersonEl(m) {
+    function createPersonEl(m, tierColorMap) {
         var div = document.createElement('div');
         var classes = 'person' + (m.paid ? ' paid' : '');
         if (m.name === myName) classes += ' me';
         if (isAdmin) classes += ' clickable';
         div.className = classes;
+
+        // 区分別背景色（未払いの場合のみ適用、支払い済みは緑で上書き）
+        if (!m.paid && tierColorMap) {
+            var colorIdx = tierColorMap[m.tier];
+            if (colorIdx !== undefined) {
+                div.setAttribute('data-tier-color', colorIdx);
+            }
+        }
 
         var check = document.createElement('div');
         check.className = 'check';
