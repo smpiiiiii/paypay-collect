@@ -63,8 +63,8 @@
         .person[data-tier-color="3"] { background: linear-gradient(135deg, #fff3e0, #ffe0b2) }
         .person[data-tier-color="4"] { background: linear-gradient(135deg, #ede7f6, #d1c4e9) }
         .person[data-tier-color="5"] { background: linear-gradient(135deg, #e0f2f1, #b2dfdb) }
-        /* 支払い済み: 区分色がある場合はそのまま維持、ない場合のみ緑 */
-        .person.paid:not([data-tier-color]) { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) }
+        /* 支払い済みは緑系で統一 */
+        .person.paid { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) !important }
         .join-box input, .join-box select { max-width: 240px; display: inline-block; text-align: center; margin-bottom: 6px }
         .msg { text-align: center; padding: 16px; color: #999; font-size: 12px }
         .share-btns { display: flex; gap: 8px; margin-top: 8px }
@@ -575,8 +575,8 @@
         if (isAdmin) classes += ' clickable';
         div.className = classes;
 
-        // 区分別背景色（支払い済みでも区分色を維持）
-        if (tierColorMap) {
+        // 区分別背景色（未払いの場合のみ適用、支払い済みは緑で統一）
+        if (!m.paid && tierColorMap) {
             var colorIdx = tierColorMap[m.tier];
             if (colorIdx !== undefined) {
                 div.setAttribute('data-tier-color', colorIdx);
