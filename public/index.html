@@ -63,8 +63,8 @@
         .person[data-tier-color="3"] { background: linear-gradient(135deg, #fff3e0, #ffe0b2) }
         .person[data-tier-color="4"] { background: linear-gradient(135deg, #ede7f6, #d1c4e9) }
         .person[data-tier-color="5"] { background: linear-gradient(135deg, #e0f2f1, #b2dfdb) }
-        /* 支払い済みは緑系でオーバーライド */
-        .person.paid { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) !important }
+        /* 支払い済み: 区分色がある場合はそのまま維持、ない場合のみ緑 */
+        .person.paid:not([data-tier-color]) { background: linear-gradient(135deg, #e8f5e9, #f1f8e9) }
         .join-box input, .join-box select { max-width: 240px; display: inline-block; text-align: center; margin-bottom: 6px }
         .msg { text-align: center; padding: 16px; color: #999; font-size: 12px }
         .share-btns { display: flex; gap: 8px; margin-top: 8px }
@@ -105,7 +105,7 @@
     <h1 id="headerTitle">💰 集金チェッカー</h1>
     <div class="sub" id="headerSub"></div>
     <div class="stats hidden" id="statsBar">
-        <div class="s">参加 <b id="joinCount">0</b>人</div>
+        <div class="s">参加 <b id="joinCount">0</b>人 <span id="tierBreakdown" style="font-size:10px;opacity:.85"></span></div>
         <div class="s">済 <b id="paidCount">0</b>人</div>
         <div class="s">回収 <b id="paidAmt">¥0</b></div>
     </div>
@@ -430,6 +430,17 @@
         var pct = totalAmt > 0 ? (paidAmt / totalAmt * 100) : 0;
 
         document.getElementById('joinCount').textContent = members.length;
+        // 区分別人数をヘッダーに表示
+        var tierBreakdown = document.getElementById('tierBreakdown');
+        if (tiers.length >= 2) {
+            var parts = tiers.map(function(t) {
+                var count = members.filter(function(m) { return m.tier === t.label; }).length;
+                return t.label + count + '人';
+            });
+            tierBreakdown.textContent = '（' + parts.join(' ') + '）';
+        } else {
+            tierBreakdown.textContent = '';
+        }
         document.getElementById('paidCount').textContent = paidCount;
         document.getElementById('paidAmt').textContent = '¥' + paidAmt.toLocaleString();
         document.getElementById('evLabel').textContent = eventData.name || '集金';
@@ -564,8 +575,8 @@
         if (isAdmin) classes += ' clickable';
         div.className = classes;
 
-        // 区分別背景色（未払いの場合のみ適用、支払い済みは緑で上書き）
-        if (!m.paid && tierColorMap) {
+        // 区分別背景色（支払い済みでも区分色を維持）
+        if (tierColorMap) {
             var colorIdx = tierColorMap[m.tier];
             if (colorIdx !== undefined) {
                 div.setAttribute('data-tier-color', colorIdx);
