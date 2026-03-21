@@ -432,7 +432,7 @@
     // ===== 更新・共有 =====
     document.getElementById('refreshBtn').addEventListener('click', function() { loadEvent(); });
     document.getElementById('shareBtn').addEventListener('click', function() {
-        var url = location.origin + '/collect/' + eventId;
+        var url = 'https://liff.line.me/' + LIFF_ID + '/collect/' + eventId;
         var tiers = getTiers();
         var members = eventData ? (eventData.members || []) : [];
         var paid = 0;
