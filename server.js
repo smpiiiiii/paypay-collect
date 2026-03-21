@@ -243,6 +243,39 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // API: 料金変更（幹事用 — adminToken必須）
+    if (pathname.match(/^\/api\/update-tiers\//) && req.method === 'POST') {
+        const id = pathname.split('/')[3];
+        const body = await getBody(req);
+        const events = loadEvents();
+        if (!events[id]) { res.writeHead(404); res.end('Not found'); return; }
+        // adminToken検証
+        if (!body.adminToken || !events[id].adminToken || body.adminToken !== events[id].adminToken) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'forbidden', message: '幹事権限がありません' }));
+            return;
+        }
+        const newTiers = Array.isArray(body.priceTiers) ? body.priceTiers.filter(t => t.label && t.amount > 0) : [];
+        if (newTiers.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', message: '有効な料金区分が必要です' }));
+            return;
+        }
+        events[id].priceTiers = newTiers;
+        // 既存メンバーの金額を新しい料金に更新
+        for (let i = 0; i < events[id].members.length; i++) {
+            const m = events[id].members[i];
+            const tierInfo = newTiers.find(t => t.label === m.tier);
+            if (tierInfo) {
+                m.amount = tierInfo.amount;
+            }
+        }
+        saveEvents(events);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+        return;
+    }
+
     // API: 幹事トークン検証
     if (pathname.match(/^\/api\/verify-admin\//) && req.method === 'GET') {
         const id = pathname.split('/')[3];

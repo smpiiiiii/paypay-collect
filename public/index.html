@@ -93,6 +93,13 @@
         /* 幹事モードバナー */
         .admin-banner { background: linear-gradient(135deg, #fff3e0, #ffe0b2); color: #e65100; padding: 8px 12px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 8px; border: 1px solid #ffcc80 }
 
+        /* 幹事金額変更フォーム */
+        .edit-tiers-card { background: linear-gradient(135deg, #fff8e1, #ffecb3); border: 2px solid #ffc107; border-radius: 14px; padding: 16px; margin-bottom: 10px }
+        .edit-tiers-card h3 { font-size: 14px; color: #f57f17; margin-bottom: 10px }
+        .edit-tier-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px }
+        .edit-tier-row .tier-label { font-size: 13px; font-weight: 700; flex: 1; min-width: 0 }
+        .edit-tier-row input { width: 100px; text-align: right; flex: 0 0 auto }
+
         /* LINE名自動入力インジケーター */
         .line-info { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border: 1px solid #a5d6a7; border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #2e7d32; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px }
         .line-info img { width: 24px; height: 24px; border-radius: 50% }
@@ -138,6 +145,13 @@
     <div id="eventView" class="hidden">
         <!-- 幹事モードバナー -->
         <div id="adminBanner" class="admin-banner hidden">🔓 幹事モードON — タップで確認チェック、🗑で参加者削除</div>
+
+        <!-- 幹事金額変更フォーム -->
+        <div id="editTiersCard" class="edit-tiers-card hidden">
+            <h3>💴 金額を変更</h3>
+            <div id="editTierRows"></div>
+            <button class="btn btn-red" id="saveTiersBtn" style="margin-top:4px">✅ 金額を更新</button>
+        </div>
 
 
         <!-- 仕組み説明カード -->
@@ -342,6 +356,33 @@
 
 
 
+    // ===== 金額変更（幹事用） =====
+    document.getElementById('saveTiersBtn').addEventListener('click', function() {
+        var inputs = document.getElementById('editTierRows').querySelectorAll('input[data-tier]');
+        var tiers = getTiers();
+        var newTiers = [];
+        for (var i = 0; i < inputs.length; i++) {
+            var label = inputs[i].getAttribute('data-tier');
+            var amount = parseInt(inputs[i].value) || 0;
+            if (amount <= 0) { alert('金額は1円以上にしてください'); return; }
+            var oldTier = tiers.find(function(t) { return t.label === label; });
+            newTiers.push({ label: label, amount: amount, paypayLink: oldTier ? (oldTier.paypayLink || '') : '' });
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/update-tiers/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                alert('✅ 金額を更新しました！');
+                loadEvent();
+            } else if (xhr.status === 403) {
+                alert('❗ 幹事権限がありません');
+            }
+        };
+        xhr.onerror = function() { alert('通信エラー'); };
+        xhr.send(JSON.stringify({ priceTiers: newTiers, adminToken: adminToken }));
+    });
+
     // ===== イベント作成 =====
     document.getElementById('createBtn').addEventListener('click', function() {
         var name = document.getElementById('cName').value.trim() || '集金';
@@ -488,6 +529,35 @@
 
         // 幹事モードバナー
         document.getElementById('adminBanner').classList.toggle('hidden', !isAdmin);
+
+        // 幹事金額変更フォームの表示制御
+        var editTiersCard = document.getElementById('editTiersCard');
+        editTiersCard.classList.toggle('hidden', !isAdmin);
+        if (isAdmin) {
+            var editTierRows = document.getElementById('editTierRows');
+            clearChildren(editTierRows);
+            var tiers0 = getTiers();
+            for (var et = 0; et < tiers0.length; et++) {
+                var row = document.createElement('div');
+                row.className = 'edit-tier-row';
+                var lbl = document.createElement('span');
+                lbl.className = 'tier-label';
+                lbl.textContent = tiers0[et].label || '一般';
+                var inp = document.createElement('input');
+                inp.type = 'number';
+                inp.inputMode = 'numeric';
+                inp.value = tiers0[et].amount || 0;
+                inp.setAttribute('data-tier', tiers0[et].label);
+                inp.placeholder = '金額';
+                var yen = document.createElement('span');
+                yen.textContent = '円';
+                yen.style.fontSize = '13px';
+                row.appendChild(lbl);
+                row.appendChild(inp);
+                row.appendChild(yen);
+                editTierRows.appendChild(row);
+            }
+        }
 
 
 
