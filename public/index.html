@@ -148,7 +148,11 @@
 
         <!-- 幹事金額変更フォーム -->
         <div id="editTiersCard" class="edit-tiers-card hidden">
-            <h3>💴 金額を変更</h3>
+            <h3>💴 金額・PayPayリンクを設定</h3>
+            <div style="font-size:11px;color:#795548;margin-bottom:10px;line-height:1.6">
+                💡 お会計後に金額を入力してください。<br>
+                PayPayリンクを貼ると、参加者のページに送金ボタンが表示されます。
+            </div>
             <div id="editTierRows"></div>
             <button class="btn btn-red" id="saveTiersBtn" style="margin-top:4px">✅ 金額を更新</button>
         </div>
@@ -685,8 +689,8 @@
         // 参加済みの場合はフォームを非表示にする
         document.getElementById('joinCard').classList.add('hidden');
 
-        // 名前と金額
-        var nameDiv = makeText('div', '👤 ' + me.name + '（' + (me.tier || '一般') + ' ¥' + (me.amount || 0).toLocaleString() + '）', '');
+        var amountText = (me.amount > 0) ? '¥' + me.amount.toLocaleString() : '未定';
+        var nameDiv = makeText('div', '👤 ' + me.name + '（' + (me.tier || '一般') + ' ' + amountText + '）', '');
         nameDiv.style.fontWeight = '700'; nameDiv.style.marginBottom = '8px';
         status.appendChild(nameDiv);
 
