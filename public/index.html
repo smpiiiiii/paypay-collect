@@ -6,6 +6,7 @@
     <title>集金チェッカー</title>
     <meta name="description" content="LINEで共有できる集金管理ツール。飲み会やイベントの集金状況をみんなで確認できます。">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box }
         body { font-family: 'Noto Sans JP', sans-serif; background: #f5f5f5; min-height: 100vh }
@@ -92,6 +93,17 @@
         /* 幹事モードバナー */
         .admin-banner { background: linear-gradient(135deg, #fff3e0, #ffe0b2); color: #e65100; padding: 8px 12px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; margin-bottom: 8px; border: 1px solid #ffcc80 }
 
+        /* LINE名自動入力インジケーター */
+        .line-info { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border: 1px solid #a5d6a7; border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #2e7d32; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px }
+        .line-info img { width: 24px; height: 24px; border-radius: 50% }
+
+        /* 幹事メンバー追加フォーム */
+        .admin-add-card { background: linear-gradient(135deg, #fff8e1, #ffecb3); border: 2px solid #ffc107; border-radius: 14px; padding: 16px; margin-bottom: 10px }
+        .admin-add-card h3 { font-size: 14px; color: #f57f17; margin-bottom: 10px }
+        .admin-add-row { display: flex; gap: 6px; flex-wrap: wrap }
+        .admin-add-row input, .admin-add-row select { flex: 1; min-width: 0 }
+        .admin-add-row .btn { flex: 0 0 auto; width: auto; padding: 10px 16px; margin-top: 0 }
+
         @media (max-width: 360px) {
             .stats { gap: 6px; font-size: 11px }
             .person { padding: 10px }
@@ -134,6 +146,17 @@
         <!-- 幹事モードバナー -->
         <div id="adminBanner" class="admin-banner hidden">🔓 幹事モードON — タップで確認チェック、🗑で参加者削除</div>
 
+        <!-- 幹事メンバー追加フォーム -->
+        <div id="adminAddCard" class="admin-add-card hidden">
+            <h3>👑 メンバーを追加（幹事専用）</h3>
+            <div class="admin-add-row">
+                <input type="text" id="adminAddName" placeholder="名前">
+                <select id="adminAddTier"></select>
+                <button class="btn btn-red" id="adminAddBtn">追加</button>
+            </div>
+        </div>
+
+
         <!-- 仕組み説明カード -->
         <div class="card" style="background:linear-gradient(135deg,#f0f4ff,#e8eeff);border:1px solid #c5cfe8;padding:14px 16px">
             <div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:8px">📌 このアプリの仕組み</div>
@@ -152,6 +175,7 @@
         <!-- 参加フォーム -->
         <div class="card" id="joinCard">
             <h3 id="joinTitle">🙋 参加する</h3>
+            <div id="lineInfo" class="line-info hidden"></div>
             <div class="join-box">
                 <input type="text" id="joinName" placeholder="あなたの名前">
                 <select id="joinTier"></select>
@@ -189,6 +213,47 @@
     var isAdmin = false;
     var myName = '';
     var adminToken = '';
+    var liffProfile = null; // LINE LIFFプロフィール
+    var LIFF_ID = '2009555688-Md2LIQl6';
+
+    // ===== LIFF初期化 =====
+    function initLiff() {
+        if (typeof liff === 'undefined') return;
+        liff.init({ liffId: LIFF_ID }).then(function() {
+            if (liff.isLoggedIn()) {
+                liff.getProfile().then(function(profile) {
+                    liffProfile = profile;
+                    var nameInput = document.getElementById('joinName');
+                    var lineInfoDiv = document.getElementById('lineInfo');
+                    // 名前が空の場合のみ自動入力
+                    if (nameInput && !nameInput.value) {
+                        nameInput.value = profile.displayName;
+                    }
+                    // LINE情報インジケーター表示
+                    if (lineInfoDiv) {
+                        lineInfoDiv.classList.remove('hidden');
+                        lineInfoDiv.innerHTML = '';
+                        if (profile.pictureUrl) {
+                            var img = document.createElement('img');
+                            img.src = profile.pictureUrl;
+                            lineInfoDiv.appendChild(img);
+                        }
+                        lineInfoDiv.appendChild(document.createTextNode('LINEアカウント: ' + profile.displayName));
+                    }
+                });
+            } else {
+                // LINEアプリ内でなければログインを促す（任意）
+                // 外部ブラウザの場合はLIFFログインにリダイレクト
+                if (!liff.isInClient()) {
+                    // 外部ブラウザではログインしない（手入力を許可）
+                } else {
+                    liff.login();
+                }
+            }
+        }).catch(function(err) {
+            console.log('LIFF init error:', err);
+        });
+    }
 
     // DOM要素取得
     var createView = document.getElementById('createView');
@@ -278,7 +343,30 @@
             } catch(e) {}
             loadEvent();
         }
+        // LIFF初期化
+        initLiff();
     }
+
+    // ===== 幹事メンバー追加 =====
+    document.getElementById('adminAddBtn').addEventListener('click', function() {
+        var name = document.getElementById('adminAddName').value.trim();
+        var tier = document.getElementById('adminAddTier').value;
+        if (!name) { alert('名前を入力してください'); return; }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API + '/api/join/' + eventId, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                if (data.status === 'already_joined') alert(name + 'さんは既に参加済みです');
+                document.getElementById('adminAddName').value = '';
+                loadEvent();
+            }
+        };
+        xhr.onerror = function() { alert('通信エラー'); };
+        xhr.send(JSON.stringify({ name: name, tier: tier, addedBy: '幹事' }));
+    });
 
     // ===== イベント作成 =====
     document.getElementById('createBtn').addEventListener('click', function() {
@@ -421,6 +509,21 @@
 
         // 幹事モードバナー
         document.getElementById('adminBanner').classList.toggle('hidden', !isAdmin);
+
+        // 幹事メンバー追加フォームの表示制御
+        document.getElementById('adminAddCard').classList.toggle('hidden', !isAdmin);
+        // 幹事追加フォームの区分セレクト更新
+        if (isAdmin) {
+            var adminTierSelect = document.getElementById('adminAddTier');
+            clearChildren(adminTierSelect);
+            var tiers2 = getTiers();
+            for (var at = 0; at < tiers2.length; at++) {
+                var opt2 = document.createElement('option');
+                opt2.value = tiers2[at].label || '';
+                opt2.textContent = (tiers2[at].label || '一般') + '（¥' + (tiers2[at].amount || 0).toLocaleString() + '）';
+                adminTierSelect.appendChild(opt2);
+            }
+        }
 
         document.getElementById('headerTitle').textContent = '💰 ' + (eventData.name || '集金');
         // ヘッダーサブ: 料金一覧
