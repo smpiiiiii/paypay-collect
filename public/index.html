@@ -159,10 +159,11 @@
 
         <!-- 仕組み説明カード -->
         <div class="card" style="background:linear-gradient(135deg,#f0f4ff,#e8eeff);border:1px solid #c5cfe8;padding:14px 16px">
-            <div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:8px">📌 このアプリの仕組み</div>
+            <div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:8px">📌 使い方</div>
             <div style="font-size:12px;color:#333;line-height:1.7">
-                <div style="margin-bottom:6px">👑 <b>幹事権限</b>：イベントを作成した人だけが幹事です。幹事のみ「確認済み✅」のチェックと参加者の削除🗑ができます。</div>
-                <div>🙋 <b>支払い申告</b>：招待された人は、自分と自分が追加した人のぶんに限り「送金しました」の自己申告ができます。</div>
+                <div style="margin-bottom:4px">1️⃣ 下のフォームから<b>参加登録</b>（LINE名が自動入力されます）</div>
+                <div style="margin-bottom:4px">2️⃣ PayPayで送金したら<b>「💸 送金しました」</b>をタップ</div>
+                <div>3️⃣ 幹事が確認したら <b>✅ 確認済み</b> になります</div>
             </div>
         </div>
 
@@ -341,6 +342,14 @@
                 myName = localStorage.getItem('collect_name_' + eventId) || '';
                 adminToken = localStorage.getItem('collect_admin_' + eventId) || '';
             } catch(e) {}
+            // ref=パラメータから招待者名を取得・保存
+            var refParam = urlParams.get('ref');
+            if (refParam) {
+                try { localStorage.setItem('collect_ref_' + eventId, refParam); } catch(e) {}
+                urlParams.delete('ref');
+                var cleanUrl2 = location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                history.replaceState(null, '', cleanUrl2);
+            }
             loadEvent();
         }
         // LIFF初期化
@@ -408,6 +417,10 @@
         var name = document.getElementById('joinName').value.trim();
         var tier = document.getElementById('joinTier').value;
         if (!name) { alert('名前を入力してください'); return; }
+        // 招待者名を取得
+        var refName = '';
+        try { refName = localStorage.getItem('collect_ref_' + eventId) || ''; } catch(e) {}
+        var addedByName = myName || refName || '';
 
         var xhr = new XMLHttpRequest();
         xhr.open('POST', API + '/api/join/' + eventId, true);
@@ -426,13 +439,14 @@
             }
         };
         xhr.onerror = function() { alert('通信エラー'); };
-        xhr.send(JSON.stringify({ name: name, tier: tier, addedBy: myName || '' }));
+        xhr.send(JSON.stringify({ name: name, tier: tier, addedBy: addedByName }));
     });
 
     // ===== 更新・共有 =====
     document.getElementById('refreshBtn').addEventListener('click', function() { loadEvent(); });
     document.getElementById('shareBtn').addEventListener('click', function() {
-        var url = 'https://liff.line.me/' + LIFF_ID + '/collect/' + eventId;
+        var refName = myName ? encodeURIComponent(myName) : '';
+        var url = 'https://liff.line.me/' + LIFF_ID + '/collect/' + eventId + (refName ? '?ref=' + refName : '');
         var tiers = getTiers();
         var members = eventData ? (eventData.members || []) : [];
         var paid = 0;
@@ -703,7 +717,13 @@
         info.className = 'info';
         var nameEl = document.createElement('div');
         nameEl.className = 'name';
-        nameEl.textContent = (m.name || '') + (m.name === myName ? ' 👈' : '');
+        var nameText = (m.name || '') + (m.name === myName ? ' 👈' : '');
+        if (m.addedBy && m.addedBy !== m.name && m.addedBy !== '幹事') {
+            nameText += '（' + m.addedBy + 'の招待）';
+        } else if (m.addedBy === '幹事') {
+            nameText += '（幹事が追加）';
+        }
+        nameEl.textContent = nameText;
         var meta = document.createElement('div');
         meta.className = 'meta';
 
