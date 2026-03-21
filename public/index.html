@@ -364,9 +364,9 @@
         for (var i = 0; i < inputs.length; i++) {
             var label = inputs[i].getAttribute('data-tier');
             var amount = parseInt(inputs[i].value) || 0;
-            if (amount <= 0) { alert('金額は1円以上にしてください'); return; }
-            var oldTier = tiers.find(function(t) { return t.label === label; });
-            newTiers.push({ label: label, amount: amount, paypayLink: oldTier ? (oldTier.paypayLink || '') : '' });
+            var ppLink = document.querySelector('input[data-paypay="' + label + '"]');
+            var paypayLink = ppLink ? ppLink.value.trim() : '';
+            newTiers.push({ label: label, amount: amount, paypayLink: paypayLink });
         }
         var xhr = new XMLHttpRequest();
         xhr.open('POST', API + '/api/update-tiers/' + eventId, true);
@@ -395,11 +395,10 @@
             var tLabel = (nameInput.value || '').trim();
             var tAmount = parseInt(amountInput.value) || 0;
             var tPaypay = (paypayInput.value || '').trim();
-            // 金額の上限チェック
             if (tAmount > 9999999) tAmount = 9999999;
-            if (tLabel && tAmount > 0) tiers.push({ label: tLabel, amount: tAmount, paypayLink: tPaypay });
+            if (tLabel) tiers.push({ label: tLabel, amount: tAmount, paypayLink: tPaypay });
         }
-        if (tiers.length === 0) { alert('料金区分を1つ以上入力してください'); return; }
+        if (tiers.length === 0) { alert('区分名を1つ以上入力してください'); return; }
 
         var xhr = new XMLHttpRequest();
         xhr.open('POST', API + '/api/create', true);
@@ -540,21 +539,29 @@
             for (var et = 0; et < tiers0.length; et++) {
                 var row = document.createElement('div');
                 row.className = 'edit-tier-row';
+                row.style.flexWrap = 'wrap';
                 var lbl = document.createElement('span');
                 lbl.className = 'tier-label';
                 lbl.textContent = tiers0[et].label || '一般';
                 var inp = document.createElement('input');
                 inp.type = 'number';
                 inp.inputMode = 'numeric';
-                inp.value = tiers0[et].amount || 0;
+                inp.value = tiers0[et].amount || '';
                 inp.setAttribute('data-tier', tiers0[et].label);
-                inp.placeholder = '金額';
+                inp.placeholder = '金額（未定なら空欄）';
                 var yen = document.createElement('span');
                 yen.textContent = '円';
                 yen.style.fontSize = '13px';
+                var ppInput = document.createElement('input');
+                ppInput.type = 'url';
+                ppInput.value = tiers0[et].paypayLink || '';
+                ppInput.setAttribute('data-paypay', tiers0[et].label);
+                ppInput.placeholder = 'PayPayリンク（任意）';
+                ppInput.style.cssText = 'flex:100%;font-size:12px;margin-top:2px';
                 row.appendChild(lbl);
                 row.appendChild(inp);
                 row.appendChild(yen);
+                row.appendChild(ppInput);
                 editTierRows.appendChild(row);
             }
         }
@@ -565,7 +572,7 @@
         // ヘッダーサブ: 料金一覧
         var tiers = getTiers();
         var subText = tiers.map(function(t) {
-            return (t.label || '一般') + ' ¥' + (t.amount || 0).toLocaleString();
+            return (t.label || '一般') + ' ' + (t.amount > 0 ? '¥' + t.amount.toLocaleString() : '未定');
         }).join(' / ');
         document.getElementById('headerSub').textContent = subText;
 

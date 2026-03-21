@@ -89,8 +89,8 @@ const server = http.createServer(async (req, res) => {
         const events = loadEvents();
         // priceTiers: [{ label: '男子', amount: 5000, paypayLink: '...' }, ...]
         const tiers = Array.isArray(body.priceTiers) && body.priceTiers.length > 0
-            ? body.priceTiers.filter(t => t.label && t.amount > 0).map(t => ({
-                label: t.label, amount: t.amount, paypayLink: t.paypayLink || ''
+            ? body.priceTiers.filter(t => t.label).map(t => ({
+                label: t.label, amount: t.amount || 0, paypayLink: t.paypayLink || ''
             }))
             : [{ label: '一般', amount: body.amount || 0, paypayLink: '' }];
         events[id] = {
@@ -255,7 +255,7 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify({ status: 'forbidden', message: '幹事権限がありません' }));
             return;
         }
-        const newTiers = Array.isArray(body.priceTiers) ? body.priceTiers.filter(t => t.label && t.amount > 0) : [];
+        const newTiers = Array.isArray(body.priceTiers) ? body.priceTiers.filter(t => t.label).map(t => ({ label: t.label, amount: t.amount || 0, paypayLink: t.paypayLink || '' })) : [];
         if (newTiers.length === 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'error', message: '有効な料金区分が必要です' }));
