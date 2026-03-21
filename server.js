@@ -302,4 +302,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDataDir();
-server.listen(PORT, '0.0.0.0', () => console.log(`集金チェッカーサーバー v3 起動: ポート ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`集金チェッカーサーバー v3 起動: ポート ${PORT}`);
+
+    // Render無料プランのスリープ防止: 14分おきに自己ping
+    const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    if (process.env.RENDER) {
+        setInterval(() => {
+            fetch(RENDER_URL).then(() => {
+                console.log(`[${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}] 🏓 自己ping成功`);
+            }).catch(() => {});
+        }, 14 * 60 * 1000); // 14分
+        console.log(`🏓 スリープ防止: 14分おきに ${RENDER_URL} にpingを送信します`);
+    }
+});
