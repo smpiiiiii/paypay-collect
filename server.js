@@ -179,6 +179,7 @@ const server = http.createServer(async (req, res) => {
             member.paid = true;
             member.paidAt = new Date().toISOString();
             member.selfReported = true;
+            member.confirmed = true; // 自己申告 = 自動確認済み
             saveEvents(events);
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
