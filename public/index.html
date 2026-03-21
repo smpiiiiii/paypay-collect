@@ -707,10 +707,33 @@
             }
             var tierPaypayLink = tierInfo && tierInfo.paypayLink ? tierInfo.paypayLink : '';
             if (tierPaypayLink) {
-                var payBtn = document.createElement('a');
-                payBtn.href = tierPaypayLink; payBtn.target = '_blank';
+                var payBtn = document.createElement('button');
                 payBtn.className = 'btn btn-paypay'; payBtn.style.marginBottom = '6px';
                 payBtn.textContent = '💱 PayPayで ¥' + (me.amount || 0).toLocaleString() + ' 送金する';
+                payBtn.addEventListener('click', function() {
+                    // PayPay送金画面を開く
+                    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
+                        // LIFFアプリ内: 外部ブラウザで開く
+                        liff.openWindow({ url: tierPaypayLink, external: true });
+                    } else {
+                        // 通常ブラウザ: 新しいタブで開く
+                        window.open(tierPaypayLink, '_blank');
+                    }
+                    // 画面に戻った時に自動リロード + 送金確認
+                    var returnHandler = function() {
+                        if (document.visibilityState === 'visible') {
+                            document.removeEventListener('visibilitychange', returnHandler);
+                            // 少し待ってからリロード＆確認
+                            setTimeout(function() {
+                                loadEvent();
+                                if (confirm('💸 PayPayで送金しましたか？\n「OK」を押すと送金済みとして報告します。')) {
+                                    selfReport(myName);
+                                }
+                            }, 500);
+                        }
+                    };
+                    document.addEventListener('visibilitychange', returnHandler);
+                });
                 status.appendChild(payBtn);
             }
             // 自己申告ボタン
