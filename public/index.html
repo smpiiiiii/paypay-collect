@@ -491,7 +491,7 @@
                 }
                 renderEvent();
             }
-            else { alert('イベントが見つかりません'); }
+            else { location.href = '/'; }
         };
         xhr.onerror = function() { alert('通信エラー: サーバーに接続できません'); };
         xhr.send();
