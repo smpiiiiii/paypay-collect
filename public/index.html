@@ -698,6 +698,22 @@
             // 支払い済み
             var done = makeText('div', '✅ 支払い済み' + (me.selfReported ? '（自己申告）' : ''), 'self-done');
             status.appendChild(done);
+        } else if (adminToken) {
+            // 幹事は自己申告不要 — 自分で確認済みにできる
+            var adminMsg = makeText('div', '👑 あなたは幹事です', '');
+            adminMsg.style.cssText = 'font-size:13px;color:#e65100;font-weight:700;margin-bottom:8px';
+            status.appendChild(adminMsg);
+            var confirmSelfBtn = document.createElement('button');
+            confirmSelfBtn.className = 'btn btn-green';
+            confirmSelfBtn.textContent = '✅ 自分を支払い済みにする';
+            confirmSelfBtn.addEventListener('click', function() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', API + '/api/confirm/' + eventId, true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onload = function() { loadEvent(); };
+                xhr.send(JSON.stringify({ name: myName, adminToken: adminToken }));
+            });
+            status.appendChild(confirmSelfBtn);
         } else {
             // 区分のPayPayリンクを取得
             var tiers = getTiers();
