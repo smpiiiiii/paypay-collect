@@ -604,9 +604,8 @@
         if (!me) { card.classList.add('hidden'); return; }
 
         card.classList.remove('hidden');
-        // 参加フォームは表示したまま（他の人も追加できる）
-        document.getElementById('joinTitle').textContent = '➕ 他の人も追加する';
-        document.getElementById('joinName').placeholder = '追加する人の名前';
+        // 参加済みの場合はフォームを非表示にする
+        document.getElementById('joinCard').classList.add('hidden');
 
         // 名前と金額
         var nameDiv = makeText('div', '👤 ' + me.name + '（' + (me.tier || '一般') + ' ¥' + (me.amount || 0).toLocaleString() + '）', '');
